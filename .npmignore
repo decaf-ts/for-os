@@ -2,6 +2,7 @@
 .run
 .vscode
 /bin
+/dist
 /src
 /docs
 /tests

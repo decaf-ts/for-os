@@ -1,33 +1,29 @@
 /**
- * @module ts-workspace
- * @description This module serves as the main entry point for the ts-workspace library.
- * @summary Aggregates and exports functionality from various submodules and utilities within the project.
- * 
- * The module includes:
- * 1. Utility functions and types from the "./utils" directory:
- *    - These likely contain helper functions, common types, and shared functionality used throughout the project.
- *    - May include operations for data manipulation, type checking, or other general-purpose utilities.
- * 
- * 2. A namespace and related types from the "./namespace" directory:
- *    - This could contain domain-specific code or a collection of related functionality.
- *    - Might include interfaces, types, or classes that represent core concepts in the library.
- * 
- * 3. A VERSION constant:
- *    - Represents the current version of the module.
- *    - Useful for version checking and compatibility purposes.
- * 
- * This structure provides a clean and organized export of the module's functionality, allowing consumers
- * to easily import and use specific parts of the library as needed.
+ * @module for-os
+ * @description Native operating-system bridges for Decaf.ts: system tray and
+ * desktop notifications, built from Rust and exposed to TypeScript/JavaScript.
+ * @summary The package ships a vendored NAPI-RS crate
+ * (`native/tray-icon-node`) that is compiled at install time. The TypeScript
+ * layer adds runtime icon switching, menu callbacks, auto-dismiss notification
+ * timers, and JavaScript button mapping on top of the raw native API. The main
+ * entry points are {@link TrayIcon}, {@link NotificationCenter}, and the native
+ * loader helpers exposed by {@link loadNativeModule}.
  */
 
-export * from "./utils";
-export * from "./namespace";
+export * from "./errors";
+export * from "./native/types";
+export * from "./native/icons";
+export * from "./native/loader";
+export * from "./tray/assets";
+export * from "./tray/TrayIcon";
+export * from "./notifications/NotificationCenter";
 
 /**
- * @const VERSION
- * @name VERSION
- * @description Represents the current version of the ts-workspace module.
- * @summary The actual version number is replaced during the build process.
+ * @description The package version, replaced by the build pipeline.
+ * @summary Reports the released semantic version of `@decaf-ts/for-os`; the
+ * placeholder literal is substituted during the release build.
  * @type {string}
+ * @constant
+ * @memberOf module:for-os
  */
 export const VERSION = "##VERSION##";

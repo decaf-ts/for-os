@@ -11,6 +11,7 @@ export default [
       "bin",
       "dist",
       "docs",
+      "native",
       "gulpfile.js",
       "workdocs",
       "!src/**/*",

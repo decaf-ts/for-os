@@ -5,6 +5,8 @@
 
 #include "./workdocs/5-HowToUse.md"
 
+#include "./workdocs/8-Native-Bridges.md"
+
 #include "./workdocs/6-Related.md"
 
 #include "./workdocs/7-Social.md"

@@ -1,4 +1,6 @@
-[![Banner](./workdocs/assets/Banner.png)](https://decaf-ts.github.io/ts-workspace/)
-## Typescript Template
+[![Banner](./workdocs/assets/Banner.png)](https://decaf-ts.github.io/for-os/)
+## for-os
 
-This repository is meant to provide an enterprise template for any standard Typescript project
+Native operating-system bridges for Decaf.ts: a Rust system tray and desktop
+notification addon exposed to TypeScript, with runtime icon switching,
+notification timers, and JavaScript button mapping.

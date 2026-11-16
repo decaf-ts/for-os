@@ -46,7 +46,7 @@ The repository exposes the following npm scripts:
 
 - `do-install` – resolves the npm token via `decaf utils credentials` into the `NPM_TOKEN` environment variable and runs `npm install`, which is handy when private registries require an auth token.
 - `update-dependencies` – upgrades all dependencies that start with `@decaf-ts/` to their latest version.
-- `update-scripts` – downloads the latest GitHub workflows, configs, and templates from the [ts-workspace](https://github.com/decaf-ts/ts-workspace) template repository.
+- `update-scripts` – downloads the latest GitHub workflows, configs, and templates from the [for-os](https://github.com/decaf-ts/for-os) template repository.
 - `sync-codex` – copies the prompts under `./.codex/prompts` into `~/.codex/prompts` so Codex CLI can reuse them.
 - `on-first-run` – bootstraps the project by calling `update-scripts` with the `--boot` flag.
 - `set-git-auth` – registers the OS-native git credential helper via `decaf utils credentials git-helper`; run this once per repository.
@@ -60,6 +60,18 @@ The repository exposes the following npm scripts:
 - `lint` – executes ESLint across the repository.
 - `lint-fix` – runs ESLint with `--fix` to automatically resolve issues when possible.
 - `prepare-pr` – runs documentation, test, readme refresh, linting, production build, and coverage ahead of opening a pull request.
+
+#### Native OS Bridges
+
+- `for-os:init` – installs Rust stable and the platform native build libraries when permitted, then builds and materializes the tray/notification addon.
+- `for-os:init:check` – reports whether this host is ready to build the native addon, without installing anything.
+- `for-os:build` – verifies the pinned native source, runs `cargo build --release --locked`, and writes `native/tray-icon-node/build-manifest.json`.
+- `for-os:build:check` – verifies the source pin and reports the existing native build.
+- `for-os:install` – builds (best effort) and materializes the addon under `node_modules/tray-icon-node`; also runs automatically as `postinstall`.
+- `for-os:install:required` – the same install, but fails when the native build cannot run.
+- `for-os:integrity:record` / `for-os:integrity:check` – re-pins or verifies `native/tray-icon-node/source-manifest.json`.
+- `for-os:test:rust` – runs the crate's Rust tests through `cargo test --locked`.
+- `for-os:integration` / `for-os:smoke` / `for-os:buttons` – real native tray and notification-button checks (interactive, non-interactive, and button-only).
 
 #### Repository AI Automation (via Codex)
 
@@ -273,6 +285,21 @@ repository-root
 └───bin
 │   │───tag_release.sh             <-- Script to help with releases
 │   └───sync-codex.sh              <-- Script to update codex prompts from reporitory ones
+│
+└───native
+│   └───tray-icon-node             <-- Vendored NAPI-RS Rust crate: tray + notification bridge
+│       │───src                    <-- Rust sources (tray, menu, icon, notifications)
+│       │───Cargo.toml/lock        <-- Pinned Rust dependency closure
+│       │───source-manifest.json   <-- SHA-512 pin of every native source file
+│       └───index.js/index.d.ts    <-- NAPI-RS loader and declarations
+│
+└───scripts
+│   │───for-os-init.mjs            <-- Installs Rust toolchain and native build dependencies
+│   │───for-os-build.mjs           <-- Builds the native addon from the pinned source
+│   │───for-os-install.mjs         <-- Materializes the addon into node_modules
+│   │───for-os-integration.mjs     <-- Real native tray/notification integration check
+│   │───for-os-integrity.mjs       <-- Records/verifies the native source pin
+│   └───lib/native.mjs             <-- Shared verification/build/install plumbing
 └───dist
 │   │   ...                         <-- Dinamically generated folder containing the bundles for distribution
 │

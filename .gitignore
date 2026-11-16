@@ -20,3 +20,7 @@
 /.confluence-token
 /node_modules
 !.gitkeep
+/coverage
+/native/tray-icon-node/target
+/native/tray-icon-node/*.node
+/native/tray-icon-node/build-manifest.json

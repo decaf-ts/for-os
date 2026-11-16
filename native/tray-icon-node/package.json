@@ -1,0 +1,56 @@
+{
+  "name": "tray-icon-node",
+  "version": "0.1.2",
+  "description": "Vendored source copy of tray-icon-node: cross-platform system tray icon library for Node.js with native Rust bindings",
+  "keywords": [
+    "tray",
+    "tray-icon",
+    "system-tray",
+    "systray",
+    "native",
+    "rust",
+    "napi",
+    "node-addon",
+    "cross-platform"
+  ],
+  "homepage": "https://github.com/nglmercer/tray-icon-node#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nglmercer/tray-icon-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nglmercer/tray-icon-node/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "nglmercer",
+    "email": "nglmercer@gmail.com"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "commonjs",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "LICENSE",
+    "README.md",
+    "*.node"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/for-os-build.mjs"
+  },
+  "napi": {
+    "binaryName": "tray-icon-node",
+    "targets": [
+      "x86_64-pc-windows-msvc",
+      "i686-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu"
+    ]
+  }
+}
