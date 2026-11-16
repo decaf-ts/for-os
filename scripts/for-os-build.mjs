@@ -11,12 +11,13 @@ import { buildNative, inspectNative, verifySourceTree } from "./lib/native.mjs";
 
 const process = globalThis.process;
 
-const HELP = `Usage: node scripts/for-os-build.mjs [--check]
+const HELP = `Usage: node scripts/for-os-build.mjs [--check] [--target <rust-triple>]
 
 Builds the vendored tray-icon-node native addon from native/tray-icon-node
 with cargo and writes build-manifest.json next to the binary.
 
   --check  verify the native source tree and report the existing build
+  --target build for one of the supported Rust target triples
   --help   show this help
 
 Prerequisites: Rust stable (cargo, rustc) and, on Linux, the GTK/appindicator
@@ -27,7 +28,15 @@ function main(argv) {
     console.log(HELP);
     return 0;
   }
-  const unknown = argv.filter((argument) => argument !== "--check");
+  const targetIndex = argv.indexOf("--target");
+  const target = targetIndex >= 0 ? argv[targetIndex + 1] : undefined;
+  const unknown = argv.filter(
+    (argument, index) =>
+      argument !== "--check" &&
+      argument !== "--target" &&
+      !(targetIndex >= 0 && index === targetIndex + 1)
+  );
+  if (targetIndex >= 0 && !target) unknown.push("--target");
   if (unknown.length) {
     console.error(`Unknown argument "${unknown[0]}".\n\n${HELP}`);
     return 2;
@@ -38,7 +47,7 @@ function main(argv) {
       return 0;
     }
     verifySourceTree();
-    buildNative();
+    buildNative({ target });
     return 0;
   } catch (failure) {
     console.error(

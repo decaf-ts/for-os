@@ -63,7 +63,7 @@ The repository exposes the following npm scripts:
 
 #### Native OS Bridges
 
-- `for-os:init` – installs Rust stable and the platform native build libraries when permitted, then builds and materializes the tray/notification addon.
+- `for-os:init` – installs the pinned Rust toolchain (1.100.0, bootstrapped with a checksum-verified rustup-init) and the platform native build libraries when permitted, then builds and materializes the tray/notification addon.
 - `for-os:init:check` – reports whether this host is ready to build the native addon, without installing anything.
 - `for-os:build` – verifies the pinned native source, runs `cargo build --release --locked`, and writes `native/tray-icon-node/build-manifest.json`.
 - `for-os:build:check` – verifies the source pin and reports the existing native build.

@@ -31,11 +31,14 @@
     "reset": "rm -rf * && git checkout . && git pull && npm run do-install",
     "build": "build-scripts --dev",
     "build:prod": "build-scripts --prod",
+    "prepack": "npm run build:prod && npm run for-os:package:prepare",
     "postinstall": "node scripts/for-os-install.mjs",
     "for-os:init": "node scripts/for-os-init.mjs",
     "for-os:init:check": "node scripts/for-os-init.mjs --check",
     "for-os:build": "node scripts/for-os-build.mjs",
     "for-os:build:check": "node scripts/for-os-build.mjs --check",
+    "for-os:package:check": "node scripts/for-os-package.mjs",
+    "for-os:package:prepare": "node scripts/for-os-package.mjs --write",
     "for-os:install": "node scripts/for-os-install.mjs",
     "for-os:install:required": "node scripts/for-os-install.mjs --require-build",
     "for-os:integrity:record": "node scripts/for-os-integrity.mjs",
@@ -80,8 +83,7 @@
     "native/tray-icon-node",
     "scripts",
     "!native/tray-icon-node/target",
-    "!native/tray-icon-node/*.node",
-    "!native/tray-icon-node/build-manifest.json"
+    "!native/tray-icon-node/target/**"
   ],
   "keywords": [
     "decaf-ts",
@@ -105,12 +107,13 @@
   },
   "homepage": "https://github.com/decaf-ts/for-os#readme",
   "dependencies": {
-    "@decaf-ts/db-decorators": "^0.20.0",
+    "@decaf-ts/db-decorators": "^0.21.0",
+    "@decaf-ts/decorator-validation": "^1.25.0",
     "@decaf-ts/logging": "^0.30.3"
   },
   "devDependencies": {
     "@decaf-ts/for-testing": "^1.3.7",
-    "@decaf-ts/utils": "^2.0.6",
+    "@decaf-ts/utils": "^2.3.0",
     "@types/jest": "^30.0.0"
   },
   "overrides": {

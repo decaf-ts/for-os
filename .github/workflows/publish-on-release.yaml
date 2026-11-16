@@ -1,36 +1,78 @@
-name: "Publish on Release"
+name: Publish on Release
 
-# Triggered by the GitHub Release created in release-on-tag.yaml (or a manual
-# dispatch). Thin caller of
-# decaf-ts/reusable-actions/.github/workflows/publish-on-release.yaml, which
-# builds, tests, generates docs, and runs the ACTUAL `npm publish`.
-#
-# !! DO NOT RENAME THIS FILE !!
-# npm trusted publishing (OIDC) validates the CALLING workflow's filename, not
-# the reusable workflow's. Every decaf-ts package is configured on npm as
-# repository=decaf-ts/<this repo>, workflow=publish-on-release.yaml. Keeping
-# this caller named publish-on-release.yaml is what keeps the trusted publisher
-# working without reconfiguring npm. Do not move `npm publish` into another
-# workflow (release-on-tag / release-on-merge-pr), or the calling workflow name
-# changes and every package's trusted publisher fails.
-#
-# `id-token: write` is required by npm trusted publishing and must be granted by
-# BOTH this caller and the reusable workflow. `pages: write`/`id-token: write`
-# also let the reusable workflow's `pages` job deploy the docs.
-
+# Keep this filename aligned with the npm trusted-publisher configuration.
 on:
   release:
-    types:
-      - published
+    types: [published]
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: read
-  id-token: write
-  pages: write
 
 jobs:
+  native:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+            binary: tray-icon-node.linux-x64-gnu.node
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            binary: tray-icon-node.linux-arm64-gnu.node
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            binary: tray-icon-node.darwin-x64.node
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            binary: tray-icon-node.darwin-arm64.node
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2022
+            binary: tray-icon-node.win32-x64-msvc.node
+          - target: i686-pc-windows-msvc
+            runner: windows-2022
+            binary: tray-icon-node.win32-ia32-msvc.node
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.100.0
+          targets: ${{ matrix.target }}
+      - name: Install Linux native build libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes pkg-config libgtk-3-dev libayatana-appindicator3-dev libglib2.0-dev libxdo-dev libx11-dev
+      - name: Build addon
+        run: node scripts/for-os-build.mjs --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: native/tray-icon-node/${{ matrix.binary }}
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
-    uses: decaf-ts/reusable-actions/.github/workflows/publish-on-release.yaml@master
-    secrets: inherit
+    needs: native
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: native/tray-icon-node
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run for-os:package:check
+      - name: Publish package with npm trusted publishing
+        run: npm publish --provenance --access public

@@ -50,6 +50,14 @@ const SKIP_FILES = new Set([
   "source-manifest.json.tmp",
 ]);
 const BINARY_PATTERN = /^tray-icon-node\..+\.node$/;
+export const TARGET_BINARIES = {
+  "x86_64-pc-windows-msvc": "tray-icon-node.win32-x64-msvc.node",
+  "i686-pc-windows-msvc": "tray-icon-node.win32-ia32-msvc.node",
+  "x86_64-apple-darwin": "tray-icon-node.darwin-x64.node",
+  "aarch64-apple-darwin": "tray-icon-node.darwin-arm64.node",
+  "x86_64-unknown-linux-gnu": "tray-icon-node.linux-x64-gnu.node",
+  "aarch64-unknown-linux-gnu": "tray-icon-node.linux-arm64-gnu.node",
+};
 
 /**
  * Converts a platform path to the forward-slash manifest form.
@@ -306,15 +314,16 @@ export function napiBinaryName(platform = process.platform, arch = process.arch)
     throw new Error(`Unsupported macOS architecture for the native addon: ${arch}`);
   }
   if (platform === "win32") {
-    if (arch === "x64" || arch === "arm64" || arch === "ia32") {
+    if (arch === "x64" || arch === "ia32") {
       return `tray-icon-node.win32-${arch}-msvc.node`;
     }
     throw new Error(`Unsupported Windows architecture for the native addon: ${arch}`);
   }
   if (platform === "linux") {
     const suffix = isMusl(platform) ? "musl" : "gnu";
-    if (arch === "x64" || arch === "arm64") return `tray-icon-node.linux-${arch}-${suffix}.node`;
-    if (arch === "arm") return `tray-icon-node.linux-arm-${suffix}eabihf.node`;
+    if (suffix === "gnu" && (arch === "x64" || arch === "arm64")) {
+      return `tray-icon-node.linux-${arch}-gnu.node`;
+    }
     throw new Error(`Unsupported Linux architecture for the native addon: ${arch}`);
   }
   throw new Error(`The native addon is built for linux, darwin, and win32 only (got ${platform}).`);
@@ -365,9 +374,10 @@ export function readBuildManifest(directory = NATIVE_DIR) {
  */
 export function binaryPath(directory = NATIVE_DIR) {
   const manifest = readBuildManifest(directory);
-  if (!manifest?.binary) return undefined;
-  const target = join(directory, manifest.binary);
-  return existsSync(target) ? target : undefined;
+  if (!manifest) return undefined;
+  const candidates = manifest.binary ? [manifest.binary] : Object.keys(manifest.binaries ?? {});
+  const binary = candidates.find((filename) => existsSync(join(directory, filename)));
+  return binary ? join(directory, binary) : undefined;
 }
 
 /**
@@ -378,7 +388,7 @@ export function binaryPath(directory = NATIVE_DIR) {
  * @returns {Object} the written build manifest
  * @throws {Error} when verification, cargo, or the platform toolchain is unavailable
  */
-export function buildNative({ directory = NATIVE_DIR, log = console.log } = {}) {
+export function buildNative({ directory = NATIVE_DIR, log = console.log, target } = {}) {
   const { observed } = verifySourceTree(directory);
   const cargo = cargoPath();
   const version = commandVersion(cargo);
@@ -388,8 +398,9 @@ export function buildNative({ directory = NATIVE_DIR, log = console.log } = {}) 
     );
   }
   const rustcVersion = commandVersion(rustcPath(), ["--version"]);
-  const triple = hostTriple();
-  const architecture = napiBinaryName(process.platform, process.arch);
+  const triple = target || hostTriple();
+  const architecture = TARGET_BINARIES[triple];
+  if (!architecture) throw new Error(`Unsupported native build target: ${triple}`);
   const missingModules = missingLinuxNativeModules();
   if (missingModules.length) {
     throw new Error(
@@ -401,6 +412,7 @@ export function buildNative({ directory = NATIVE_DIR, log = console.log } = {}) 
   }
   log(`for-os: building ${NATIVE_PACKAGE}@${NATIVE_VERSION} from native source (${triple})`);
   const args = ["build", "--release", "--locked", "--manifest-path", join(directory, "Cargo.toml")];
+  if (target) args.push("--target", target);
   const result = run(cargo, args);
   if (!result.ok) {
     throw new Error(
@@ -408,7 +420,8 @@ export function buildNative({ directory = NATIVE_DIR, log = console.log } = {}) 
         "Install the platform GUI development libraries listed in native/tray-icon-node/UPSTREAM.md and retry."
     );
   }
-  const artifact = join(directory, "target", "release", platformArtifactName());
+  const artifactDirectory = target ? join(directory, "target", target, "release") : join(directory, "target", "release");
+  const artifact = join(artifactDirectory, platformArtifactNameForTarget(triple));
   if (!existsSync(artifact)) {
     throw new Error(`cargo build succeeded but ${artifact} does not exist.`);
   }
@@ -420,8 +433,8 @@ export function buildNative({ directory = NATIVE_DIR, log = console.log } = {}) 
     packageVersion: NATIVE_VERSION,
     sourceDigest: observed.sourceDigest,
     target: triple,
-    platform: process.platform,
-    arch: process.arch,
+    platform: triple.includes("windows") ? "win32" : triple.includes("apple") ? "darwin" : "linux",
+    arch: triple.startsWith("i686") ? "ia32" : triple.startsWith("x86_64") ? "x64" : "arm64",
     binary: architecture,
     sha512: sha512File(destination),
     builtAt: new Date().toISOString(),
@@ -430,6 +443,14 @@ export function buildNative({ directory = NATIVE_DIR, log = console.log } = {}) 
   writeFileSync(join(directory, BUILD_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
   log(`for-os: built ${architecture} (sha512 ${manifest.sha512})`);
   return manifest;
+}
+
+/** Returns the Rust shared-library filename for a target triple. */
+export function platformArtifactNameForTarget(target) {
+  if (target.includes("windows")) return "tray_icon_node.dll";
+  if (target.includes("apple")) return "libtray_icon_node.dylib";
+  if (target.includes("linux")) return "libtray_icon_node.so";
+  throw new Error(`Unsupported native build target: ${target}`);
 }
 
 /**
@@ -484,7 +505,16 @@ export function installNative({
   required = false,
 } = {}) {
   const { manifest } = verifySourceTree(directory);
-  const build = ensureBuilt({ directory, log, required });
+  const currentBinaryName = napiBinaryName();
+  const currentBinary = join(directory, currentBinaryName);
+  const bundledManifest = readBuildManifest(directory);
+  const expectedDigest = bundledManifest?.binaries?.[currentBinaryName];
+  if (existsSync(currentBinary) && expectedDigest && sha512File(currentBinary) !== expectedDigest) {
+    throw new Error(`Bundled native binary integrity check failed for ${currentBinaryName}.`);
+  }
+  const build = existsSync(currentBinary)
+    ? { binary: currentBinaryName, prebuilt: true }
+    : ensureBuilt({ directory, log, required });
 
   const materialize = (targetDirectory) => {
     rmSync(targetDirectory, { recursive: true, force: true });
@@ -495,9 +525,17 @@ export function installNative({
       mkdirSync(dirname(target), { recursive: true });
       copyFileSync(source, target);
     }
+    for (const filename of readdirSync(directory).filter((name) => BINARY_PATTERN.test(name))) {
+      copyFileSync(join(directory, filename), join(targetDirectory, filename));
+    }
     if (build) {
-      copyFileSync(join(directory, BUILD_MANIFEST), join(targetDirectory, BUILD_MANIFEST));
-      copyFileSync(join(directory, build.binary), join(targetDirectory, build.binary));
+      const buildManifest = join(directory, BUILD_MANIFEST);
+      if (existsSync(buildManifest)) {
+        copyFileSync(buildManifest, join(targetDirectory, BUILD_MANIFEST));
+      }
+      if (build.binary && existsSync(join(directory, build.binary))) {
+        copyFileSync(join(directory, build.binary), join(targetDirectory, build.binary));
+      }
     }
   };
 
@@ -542,7 +580,11 @@ export function inspectNative({ directory = NATIVE_DIR, log = console.log } = {}
     `for-os: native source verified (${Object.keys(observed.files).length} files, source digest ${observed.sourceDigest}).`
   );
   if (build && binary) {
-    log(`for-os: build manifest present for ${build.binary} (${build.target}, sha512 ${build.sha512}).`);
+    if (build.binaries) {
+      log(`for-os: package manifest present for ${Object.keys(build.binaries).length} native binaries.`);
+    } else {
+      log(`for-os: build manifest present for ${build.binary} (${build.target}, sha512 ${build.sha512}).`);
+    }
   } else {
     log("for-os: no native binary in the source tree (run `npm run for-os:build`).");
   }

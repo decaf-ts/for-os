@@ -45,8 +45,8 @@ auditable bridge to the desktop:
   [`nglmercer/tray-icon-node`](https://github.com/nglmercer/tray-icon-node) at
   commit `cb91e86184ed8612bcdee904277b4d5e78d966c3`, extended with the
   notification-action bridge, notification timers, and configurable buttons.
-  It is built from the pinned source at install time; no prebuilt binary is
-  downloaded.
+  Release builds compile and publish native binaries for the supported Linux,
+  macOS, and Windows targets.
 
 The TypeScript layer never shells out to `notify-send` or PowerShell itself:
 all OS commands live in the Rust crate, and every failure is reported through
@@ -62,11 +62,10 @@ the Decaf error hierarchy.
 - [Testing](./workdocs/tutorials/For%20Developers.md#testing)
 - [Publishing](./workdocs/tutorials/For%20Developers.md#publishing)
 
-Install the package and build the native addon:
+Install the package; its matching prebuilt Rust addon is included:
 
 ```bash
 npm install @decaf-ts/for-os
-npm run for-os:init       # Rust toolchain + platform native build deps + addon
 ```
 
 Use a tray whose icon changes at runtime and whose menu calls JavaScript:
@@ -163,6 +162,11 @@ tray.close();
 - `close()` is idempotent and removes the temporary icon files.
 - `TRAY_ICON_BASE64.idle` / `.active` are embedded 16×16 PNG examples for
   dynamic-icon smoke checks.
+- Icon decoding accepts PNG and JPEG input only; other formats are rejected as
+  unsupported. Icons are limited to 4096px per side — the limit is checked on
+  the encoded image header before decoding (with decoder limits as defense in
+  depth) and on raw `rgba` dimensions, so oversized or zero-dimension icons
+  fail with a dimension error instead of allocating memory for them.
 
 #### Notifications
 
@@ -222,12 +226,13 @@ notification.onAction((id) => console.log("callback handled", id));
 
 | Script | Purpose |
 | --- | --- |
-| `npm run for-os:init` | Install Rust stable + Linux native build libraries (or report the exact manual commands where installation is not permitted), then build and materialize the addon |
+| `npm run for-os:init` | Install the pinned Rust toolchain (1.100.0, bootstrapped with a checksum-verified rustup-init) + Linux native build libraries (or report the exact manual commands where installation is not permitted), then build and materialize the addon |
 | `npm run for-os:init:check` | Report host readiness without mutating anything |
 | `npm run for-os:build` | `cargo build --release --locked` from the pinned source and write `build-manifest.json` |
 | `npm run for-os:build:check` | Verify the source pin and report the existing build |
-| `npm run for-os:install` | Build (best effort) and materialize `node_modules/tray-icon-node` |
+| `npm run for-os:install` | Materialize the bundled addon; build from source as a fallback |
 | `npm run for-os:install:required` | Same, but fail when the native build cannot run |
+| `npm run for-os:package:check` | Verify every supported native binary is present before packaging |
 | `npm run for-os:integrity:record` | Re-pin the native source tree (security-relevant; review the diff) |
 | `npm run for-os:integrity:check` | Verify the source tree against the pin |
 | `npm run for-os:test:rust` | Rust unit tests (notification argument/timer/action contract and tray conversions) |
@@ -235,12 +240,12 @@ notification.onAction((id) => console.log("callback handled", id));
 | `npm run for-os:smoke` | Non-interactive tray create → icon switch → timed notification → close |
 | `npm run for-os:buttons` | Sends an actionable notification and waits for a JavaScript button callback |
 
-`postinstall` runs `scripts/for-os-install.mjs`, so a normal `npm install`
-materializes the addon when a toolchain is present and degrades with a warning
-when it is not. The addon is materialized under the package and, when npm
-reports an `INIT_CWD`, under that project's `node_modules` as well; the loader
-searches the current directory, `INIT_CWD`, and the Node entrypoint's directory,
-and `FOR_OS_NATIVE_MODULE` can pin an explicit path.
+`postinstall` runs `scripts/for-os-install.mjs` and materializes the bundled
+addon under the package and, when npm reports an `INIT_CWD`, under that
+project's `node_modules` as well. It only attempts a local Rust build when the
+matching prebuilt binary is absent. The loader searches the current directory,
+`INIT_CWD`, and the Node entrypoint's directory, and `FOR_OS_NATIVE_MODULE` can
+pin an explicit path.
 
 To exercise button mapping on a headless Linux host, run the integration check
 with a notification daemon and trigger the notification body (the default
@@ -252,19 +257,30 @@ dbus-run-session -- xvfb-run -a bash -c '\
   npm run for-os:buttons'
 ```
 
-#### CI / native smoke limitation
+#### Continuous integration
 
-The real native smoke test (`tests/integration/native-smoke.test.ts`) is gated
-on `FOR_OS_SMOKE=1` plus a live `DISPLAY` and notification daemon, so the
-standard CI run skips it and only verifies the addon-unavailable path. The
-TypeScript bridges are covered by the fake-native unit tests; CI integration of
-the real tray/notification smoke is tracked as a follow-up after the current
-release gate.
+The decaf-ts umbrella repository runs two GitHub workflows for this package:
+
+- `for-os-native` — path-filtered PR signal (runs when the `for-os` submodule
+  pointer or the workflow moves), a blocking reusable job in the umbrella
+  release chain, and manual dispatch. It installs the pinned Rust toolchain via
+  `for-os:init`, verifies the source pin (`for-os:integrity:check`), builds the
+  addon (`for-os:build`, `for-os:build:check`), and runs the non-interactive
+  smoke under `xvfb-run` + `dbus-run-session` on a stock ubuntu runner.
+- `rust-audit` — `cargo-audit` (pinned prebuilt binary) scans
+  `native/tray-icon-node/Cargo.lock` against the RustSec advisory database on
+  PRs that move the vendored crate, weekly, and on demand. Vulnerabilities
+  at/above low severity fail the job; unmaintained/unsound/notice advisories
+  are report-only (`.github/rust-audit/audit.toml`).
 
 #### Prerequisites
 
 - Node.js >= 20 and npm >= 10.
-- Rust stable (`rustup`, `cargo`, `rustc`).
+- Pinned Rust toolchain 1.100.0 (`rustup`, `cargo`, `rustc`). A missing
+  toolchain is bootstrapped by `for-os:init` with rustup-init 1.29.3,
+  downloaded from the versioned rustup archive and verified against a
+  hard-coded SHA-256 before execution — the installer is never piped from the
+  network into a shell.
 - Linux (Ubuntu/Debian): `build-essential pkg-config libgtk-3-dev
   libayatana-appindicator3-dev libglib2.0-dev libxdo-dev libx11-dev
   libnotify-bin`.
@@ -296,13 +312,13 @@ release gate.
 
 #### Published package layout
 
-- `files` publishes three things: the compiled output `lib` (ESM at
+- `files` publishes the compiled output `lib` (ESM at
   `lib/esm`, CommonJS at `lib/cjs`, declarations at `lib/types`), the
   `native/tray-icon-node` Rust sources (Cargo manifest and lockfile plus the
-  NAPI-RS loader `index.js`/`index.d.ts`, with `target/`, any built `.node`,
-  and `build-manifest.json` excluded), and the `scripts/` folder that
-  `postinstall` runs. Consumers build the addon locally at install time;
-  no prebuilt binary is ever published.
+  NAPI-RS loader `index.js`/`index.d.ts`, all six supported `.node` binaries,
+  and their SHA-512 build manifest), and the `scripts/` folder that
+  `postinstall` runs. The release workflow builds each target on a matching
+  runner, combines the binaries, and refuses to publish an incomplete package.
 - `exports` maps `.` to both module systems: ESM at `./lib/esm/index.js`
   with types `./lib/types/index.d.mts`, and CommonJS at `./lib/cjs/index.cjs`
   with types `./lib/types/index.d.cts`. `main`, `module`, and `types` mirror
@@ -310,16 +326,12 @@ release gate.
 
 #### Publishing and credential gates
 
-- Publishing follows the repository's standard release path (`release`,
-  `prepare-release`, tag/release workflows). It requires the existing npm
-  publish credential (`NPM_TOKEN` in `.npmrc`); no new credential is
-  introduced by this package.
-- Building the native addon requires access to the Rust toolchain and the
-  crates.io registry at install/build time; `Cargo.lock` pins the full crate
-  closure.
-- CI runners that publish must have the platform native libraries listed
-  above. A runner without them can still publish the TypeScript output, but
-  `npm run for-os:install:required` will fail by design.
+- Publishing runs the platform build matrix and publishes through npm trusted
+  publishing from the `publish-on-release.yaml` workflow.
+- Release builds need the Rust toolchain and crates.io access; `Cargo.lock`
+  pins the full crate closure. Consumers receive the compiled addon and do not
+  need Rust or a native compiler. Linux runtime hosts still need GTK and
+  AppIndicator runtime libraries, plus `notify-send` for notifications.
 
 
 ### Related
