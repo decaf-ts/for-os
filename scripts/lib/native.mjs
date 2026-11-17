@@ -53,7 +53,6 @@ const BINARY_PATTERN = /^tray-icon-node\..+\.node$/;
 export const TARGET_BINARIES = {
   "x86_64-pc-windows-msvc": "tray-icon-node.win32-x64-msvc.node",
   "i686-pc-windows-msvc": "tray-icon-node.win32-ia32-msvc.node",
-  "x86_64-apple-darwin": "tray-icon-node.darwin-x64.node",
   "aarch64-apple-darwin": "tray-icon-node.darwin-arm64.node",
   "x86_64-unknown-linux-gnu": "tray-icon-node.linux-x64-gnu.node",
   "aarch64-unknown-linux-gnu": "tray-icon-node.linux-arm64-gnu.node",
