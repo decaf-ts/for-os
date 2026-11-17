@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import fs, { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { NativeModuleUnavailableError } from "../../src/errors";
 import {
   loadNativeModule,
@@ -44,15 +44,23 @@ describe("native module loader", () => {
   }
 
   beforeEach(() => {
-    workspace = mkdtempSync(join(tmpdir(), "for-os-loader-test-"));
+    workspace = realpathSync(mkdtempSync(join(tmpdir(), "for-os-loader-test-")));
     originalModule = process.env[NATIVE_MODULE_ENV];
     originalInitCwd = process.env.INIT_CWD;
     delete process.env[NATIVE_MODULE_ENV];
     delete process.env.INIT_CWD;
     resetNativeModuleCache();
+
+    // Keep real fixture loading, but hide addons installed or built on the host.
+    // candidatePaths also searches the checkout and Node entrypoint directories.
+    const existsSync = fs.existsSync;
+    jest.spyOn(fs, "existsSync").mockImplementation((file) =>
+      typeof file === "string" && file.startsWith(workspace + sep) && existsSync(file)
+    );
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     resetNativeModuleCache();
     if (originalModule === undefined) delete process.env[NATIVE_MODULE_ENV];
     else process.env[NATIVE_MODULE_ENV] = originalModule;
@@ -145,6 +153,33 @@ describe("native module loader", () => {
     const addon = join(packageDirectory, "index.cjs");
     writeFileSync(addon, VALID_MODULE);
     process.env.INIT_CWD = workspace;
+
+    const result = loadNativeModule();
+    expect(result.available).toBe(true);
+    if (!result.available) return;
+    expect(result.modulePath).toBe(addon);
+  });
+
+  it("continues to a usable fallback after an explicit addon throws", () => {
+    process.env[NATIVE_MODULE_ENV] = writeFile("throws.cjs", 'throw new Error("fixture boom");\n');
+    const nativeDirectory = join(workspace, "native", NATIVE_MODULE_PACKAGE);
+    mkdirSync(nativeDirectory, { recursive: true });
+    const addon = join(nativeDirectory, "index.js");
+    writeFileSync(addon, VALID_MODULE);
+    process.env.INIT_CWD = workspace;
+
+    const result = loadNativeModule();
+    expect(result.available).toBe(true);
+    if (!result.available) return;
+    expect(result.modulePath).toBe(addon);
+  });
+
+  it("resolves the addon from the current project", () => {
+    const nativeDirectory = join(workspace, "native", NATIVE_MODULE_PACKAGE);
+    mkdirSync(nativeDirectory, { recursive: true });
+    const addon = join(nativeDirectory, "index.js");
+    writeFileSync(addon, VALID_MODULE);
+    jest.spyOn(process, "cwd").mockReturnValue(workspace);
 
     const result = loadNativeModule();
     expect(result.available).toBe(true);

@@ -45,8 +45,8 @@ auditable bridge to the desktop:
   [`nglmercer/tray-icon-node`](https://github.com/nglmercer/tray-icon-node) at
   commit `cb91e86184ed8612bcdee904277b4d5e78d966c3`, extended with the
   notification-action bridge, notification timers, and configurable buttons.
-  Release builds compile and publish native binaries for the supported Linux,
-  macOS, and Windows targets.
+  It is built from the pinned source at install time; no prebuilt binary is
+  downloaded.
 
 The TypeScript layer never shells out to `notify-send` or PowerShell itself:
 all OS commands live in the Rust crate, and every failure is reported through
@@ -62,10 +62,11 @@ the Decaf error hierarchy.
 - [Testing](./workdocs/tutorials/For%20Developers.md#testing)
 - [Publishing](./workdocs/tutorials/For%20Developers.md#publishing)
 
-Install the package; its matching prebuilt Rust addon is included:
+Install the package and build the native addon:
 
 ```bash
 npm install @decaf-ts/for-os
+npm run for-os:init       # Rust toolchain + platform native build deps + addon
 ```
 
 Use a tray whose icon changes at runtime and whose menu calls JavaScript:
@@ -222,6 +223,9 @@ notification.onAction((id) => console.log("callback handled", id));
 | Notification auto-dismiss timer | yes | system default | yes |
 | Notification action buttons → JS | yes (`notify-send --wait`) | no | no |
 
+The npm package bundles Linux x64/ARM64 (glibc), macOS x64/ARM64, and Windows
+x64/x86 binaries. Linux musl and Windows ARM64 are not release targets.
+
 #### Scripts
 
 | Script | Purpose |
@@ -232,7 +236,7 @@ notification.onAction((id) => console.log("callback handled", id));
 | `npm run for-os:build:check` | Verify the source pin and report the existing build |
 | `npm run for-os:install` | Materialize the bundled addon; build from source as a fallback |
 | `npm run for-os:install:required` | Same, but fail when the native build cannot run |
-| `npm run for-os:package:check` | Verify every supported native binary is present before packaging |
+| `npm run for-os:package:check` | Verify that all release target binaries are present |
 | `npm run for-os:integrity:record` | Re-pin the native source tree (security-relevant; review the diff) |
 | `npm run for-os:integrity:check` | Verify the source tree against the pin |
 | `npm run for-os:test:rust` | Rust unit tests (notification argument/timer/action contract and tray conversions) |
@@ -240,9 +244,9 @@ notification.onAction((id) => console.log("callback handled", id));
 | `npm run for-os:smoke` | Non-interactive tray create → icon switch → timed notification → close |
 | `npm run for-os:buttons` | Sends an actionable notification and waits for a JavaScript button callback |
 
-`postinstall` runs `scripts/for-os-install.mjs` and materializes the bundled
-addon under the package and, when npm reports an `INIT_CWD`, under that
-project's `node_modules` as well. It only attempts a local Rust build when the
+`postinstall` runs `scripts/for-os-install.mjs` and materializes the matching
+bundled addon under the package and, when npm reports an `INIT_CWD`, under that
+project's `node_modules` as well. It attempts a local Rust build only if the
 matching prebuilt binary is absent. The loader searches the current directory,
 `INIT_CWD`, and the Node entrypoint's directory, and `FOR_OS_NATIVE_MODULE` can
 pin an explicit path.
@@ -259,19 +263,17 @@ dbus-run-session -- xvfb-run -a bash -c '\
 
 #### Continuous integration
 
-The decaf-ts umbrella repository runs two GitHub workflows for this package:
+This repository owns two workflows for its standalone CI:
 
-- `for-os-native` — path-filtered PR signal (runs when the `for-os` submodule
-  pointer or the workflow moves), a blocking reusable job in the umbrella
-  release chain, and manual dispatch. It installs the pinned Rust toolchain via
-  `for-os:init`, verifies the source pin (`for-os:integrity:check`), builds the
-  addon (`for-os:build`, `for-os:build:check`), and runs the non-interactive
-  smoke under `xvfb-run` + `dbus-run-session` on a stock ubuntu runner.
-- `rust-audit` — `cargo-audit` (pinned prebuilt binary) scans
-  `native/tray-icon-node/Cargo.lock` against the RustSec advisory database on
-  PRs that move the vendored crate, weekly, and on demand. Vulnerabilities
+- `for-os-native` builds and smoke-checks the Linux tray and notification
+  addon on relevant pushes and pull requests, plus manual dispatch.
+- `rust-audit` scans `native/tray-icon-node/Cargo.lock` against the RustSec
+  advisory database on crate changes, weekly, and on demand. Vulnerabilities
   at/above low severity fail the job; unmaintained/unsound/notice advisories
   are report-only (`.github/rust-audit/audit.toml`).
+
+These workflows run against this repository directly; they do not depend on a
+copy in the umbrella repository.
 
 #### Prerequisites
 
@@ -293,8 +295,8 @@ The decaf-ts umbrella repository runs two GitHub workflows for this package:
 
 #### Security and integrity
 
-- The addon is built from the audited source tree, never downloaded as a
-  prebuilt `.node`.
+- Release binaries are built from the audited source tree on target-matched
+  runners; no third-party prebuilt addon is downloaded.
 - `source-manifest.json` pins every source/wrapper file by SHA-512 and the
   canonical source digest. Every build script verifies it before compiling.
 - `build-manifest.json` records the source digest, target triple, toolchain
@@ -315,10 +317,10 @@ The decaf-ts umbrella repository runs two GitHub workflows for this package:
 - `files` publishes the compiled output `lib` (ESM at
   `lib/esm`, CommonJS at `lib/cjs`, declarations at `lib/types`), the
   `native/tray-icon-node` Rust sources (Cargo manifest and lockfile plus the
-  NAPI-RS loader `index.js`/`index.d.ts`, all six supported `.node` binaries,
-  and their SHA-512 build manifest), and the `scripts/` folder that
-  `postinstall` runs. The release workflow builds each target on a matching
-  runner, combines the binaries, and refuses to publish an incomplete package.
+  NAPI-RS loader `index.js`/`index.d.ts`, all supported `.node` binaries, and
+  their SHA-512 manifest), and the `scripts/` folder that `postinstall` runs.
+  The release workflow builds each target on a matching runner, combines the
+  binaries, and blocks publication if any target is missing.
 - `exports` maps `.` to both module systems: ESM at `./lib/esm/index.js`
   with types `./lib/types/index.d.mts`, and CommonJS at `./lib/cjs/index.cjs`
   with types `./lib/types/index.d.cts`. `main`, `module`, and `types` mirror
@@ -326,8 +328,7 @@ The decaf-ts umbrella repository runs two GitHub workflows for this package:
 
 #### Publishing and credential gates
 
-- Publishing runs the platform build matrix and publishes through npm trusted
-  publishing from the `publish-on-release.yaml` workflow.
+- Publishing builds target binaries then publishes with npm trusted publishing.
 - Release builds need the Rust toolchain and crates.io access; `Cargo.lock`
   pins the full crate closure. Consumers receive the compiled addon and do not
   need Rust or a native compiler. Linux runtime hosts still need GTK and

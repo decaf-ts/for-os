@@ -10,6 +10,19 @@ permissions:
   contents: read
 
 jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:prod
+      - run: npm run test:all
+      - run: npm run for-os:integrity:check
+
   native:
     name: Build ${{ matrix.target }}
     strategy:
@@ -17,10 +30,10 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-24.04
+            runner: ubuntu-22.04
             binary: tray-icon-node.linux-x64-gnu.node
           - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-22.04-arm
             binary: tray-icon-node.linux-arm64-gnu.node
           - target: x86_64-apple-darwin
             runner: macos-15-intel
@@ -37,6 +50,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.100.0
@@ -55,8 +71,32 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  docs:
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run docs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
   publish:
-    needs: native
+    needs: [native, validate, docs]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

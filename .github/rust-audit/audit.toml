@@ -1,0 +1,29 @@
+# cargo-audit policy for the vendored Rust crate native/tray-icon-node.
+# The workflow copies this file to ~/.cargo/audit.toml for the audit run.
+#
+# Failure policy:
+# - Fail for vulnerability advisories at or above CVSS low; unscored
+#   vulnerabilities also fail.
+# - Report unmaintained, unsound, and notice advisories without failing.
+# - Withdrawn advisories are excluded by the RustSec database.
+#
+# Accepted risks belong under [advisories] ignore, with a comment explaining
+# why the advisory does not affect this crate.
+
+[advisories]
+severity_threshold = "low"
+informational_warnings = ["unmaintained", "unsound", "notice"]
+ignore = []
+
+[database]
+fetch = true
+stale = false
+
+[output]
+deny = []
+format = "terminal"
+quiet = false
+show_tree = true
+
+[yanked]
+enabled = false

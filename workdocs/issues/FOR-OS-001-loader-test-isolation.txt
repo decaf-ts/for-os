@@ -1,0 +1,15 @@
+FOR-OS-001: Loader unit tests discover host native addons
+Owner: @decaf-ts/for-os maintainers
+Status: Resolved
+
+Reproduction: With a built tray-icon-node addon installed in the checkout,
+run npm run test:all -- --runInBand. Five tests in tests/unit/loader.test.ts
+fail: four unavailable-module cases unexpectedly load the host addon, and
+the INIT_CWD case loads the checkout addon instead of its temporary fixture.
+
+Fix: Limit filesystem existence checks in loader unit tests to each test's
+temporary directory; restore spies during cleanup. Derive and canonicalize
+the directory with tmpdir(), mkdtempSync(), and realpathSync() so checkout
+locations and temporary-directory symlinks do not affect the assertions.
+Keep real module loading and test both current-project and error fallback
+discovery without changing production resolution order.

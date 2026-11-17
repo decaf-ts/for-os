@@ -109,6 +109,9 @@ notification.onAction((id) => console.log("callback handled", id));
 | Notification auto-dismiss timer | yes | system default | yes |
 | Notification action buttons → JS | yes (`notify-send --wait`) | no | no |
 
+The npm package bundles Linux x64/ARM64 (glibc), macOS x64/ARM64, and Windows
+x64/x86 binaries. Linux musl and Windows ARM64 are not release targets.
+
 #### Scripts
 
 | Script | Purpose |
@@ -146,19 +149,17 @@ dbus-run-session -- xvfb-run -a bash -c '\
 
 #### Continuous integration
 
-The decaf-ts umbrella repository runs two GitHub workflows for this package:
+This repository owns two workflows for its standalone CI:
 
-- `for-os-native` — path-filtered PR signal (runs when the `for-os` submodule
-  pointer or the workflow moves), a blocking reusable job in the umbrella
-  release chain, and manual dispatch. It installs the pinned Rust toolchain via
-  `for-os:init`, verifies the source pin (`for-os:integrity:check`), builds the
-  addon (`for-os:build`, `for-os:build:check`), and runs the non-interactive
-  smoke under `xvfb-run` + `dbus-run-session` on a stock ubuntu runner.
-- `rust-audit` — `cargo-audit` (pinned prebuilt binary) scans
-  `native/tray-icon-node/Cargo.lock` against the RustSec advisory database on
-  PRs that move the vendored crate, weekly, and on demand. Vulnerabilities
+- `for-os-native` builds and smoke-checks the Linux tray and notification
+  addon on relevant pushes and pull requests, plus manual dispatch.
+- `rust-audit` scans `native/tray-icon-node/Cargo.lock` against the RustSec
+  advisory database on crate changes, weekly, and on demand. Vulnerabilities
   at/above low severity fail the job; unmaintained/unsound/notice advisories
   are report-only (`.github/rust-audit/audit.toml`).
+
+These workflows run against this repository directly; they do not depend on a
+copy in the umbrella repository.
 
 #### Prerequisites
 

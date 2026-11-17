@@ -1,0 +1,68 @@
+name: Rust Audit
+
+on:
+  pull_request:
+    paths:
+      - "native/tray-icon-node/Cargo.lock"
+      - "native/tray-icon-node/Cargo.toml"
+      - ".github/rust-audit/audit.toml"
+      - ".github/workflows/rust-audit.yml"
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_AUDIT_VERSION: "0.23.0"
+  CARGO_LOCK: "native/tray-icon-node/Cargo.lock"
+
+jobs:
+  cargo-audit:
+    name: cargo audit (RustSec)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Restore cargo-audit and RustSec advisory database
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-audit
+            ~/.cargo/advisory-db
+          key: cargo-audit-${{ env.CARGO_AUDIT_VERSION }}-${{ runner.os }}-v1
+          restore-keys: |
+            cargo-audit-${{ env.CARGO_AUDIT_VERSION }}-${{ runner.os }}-
+
+      - name: Install pinned cargo-audit binary
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          if command -v cargo-audit >/dev/null 2>&1; then
+            cargo-audit --version
+            exit 0
+          fi
+          mkdir -p "$HOME/.cargo/bin"
+          url="https://github.com/rustsec/rustsec/releases/download/cargo-audit/v${CARGO_AUDIT_VERSION}/cargo-audit-x86_64-unknown-linux-gnu-v${CARGO_AUDIT_VERSION}.tgz"
+          curl --proto '=https' --tlsv1.2 -sSfL "$url" -o /tmp/cargo-audit.tgz
+          echo "b77993532b253fcbf550996d7716465ec3d734d4e74e7f87bfb65a19add0fb59  /tmp/cargo-audit.tgz" | sha256sum -c -
+          tar xzf /tmp/cargo-audit.tgz -C /tmp
+          install -m 0755 "/tmp/cargo-audit-x86_64-unknown-linux-gnu-v${CARGO_AUDIT_VERSION}/cargo-audit" "$HOME/.cargo/bin/cargo-audit"
+          cargo-audit --version
+
+      - name: Apply audit policy
+        run: |
+          mkdir -p "$HOME/.cargo"
+          cp .github/rust-audit/audit.toml "$HOME/.cargo/audit.toml"
+
+      - name: Audit vendored Cargo.lock
+        run: cargo-audit audit --file "$CARGO_LOCK"
