@@ -1,6 +1,6 @@
 {
   "name": "@decaf-ts/for-os",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Native operating-system bridges for Decaf.ts: Rust system tray and desktop notifications exposed to TypeScript, with runtime icon switching, notification timers, and JavaScript button mapping",
   "type": "module",
   "exports": {
