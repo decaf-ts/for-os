@@ -35,9 +35,11 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-22.04-arm
             binary: tray-icon-node.linux-arm64-gnu.node
-          - target: x86_64-apple-darwin
-            runner: macos-13
-            binary: tray-icon-node.darwin-x64.node
+          # Temporarily disabled: the Intel macOS runner is not starting.
+          # Re-enable when a supported macOS Intel runner is available.
+          # - target: x86_64-apple-darwin
+          #   runner: macos-13
+          #   binary: tray-icon-node.darwin-x64.node
           - target: aarch64-apple-darwin
             runner: macos-latest
             binary: tray-icon-node.darwin-arm64.node
