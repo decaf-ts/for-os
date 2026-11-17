@@ -39,7 +39,7 @@ jobs:
             runner: macos-13
             binary: tray-icon-node.darwin-x64.node
           - target: aarch64-apple-darwin
-            runner: macos-14
+            runner: macos-latest
             binary: tray-icon-node.darwin-arm64.node
           - target: x86_64-pc-windows-msvc
             runner: windows-2022
@@ -50,6 +50,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - name: Disable Windows line-ending conversion
+        if: runner.os == 'Windows'
+        run: git config core.autocrlf false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
