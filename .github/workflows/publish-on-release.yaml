@@ -36,7 +36,7 @@ jobs:
             runner: ubuntu-22.04-arm
             binary: tray-icon-node.linux-arm64-gnu.node
           - target: x86_64-apple-darwin
-            runner: macos-15-intel
+            runner: macos-13
             binary: tray-icon-node.darwin-x64.node
           - target: aarch64-apple-darwin
             runner: macos-14
@@ -88,6 +88,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run coverage
       - run: npm run docs
       - uses: actions/upload-pages-artifact@v3
         with:
