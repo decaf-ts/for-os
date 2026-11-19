@@ -89,6 +89,7 @@ describe("NotificationCenter", () => {
       onDismiss: (reason) => reasons.push(reason),
     });
     expect(api.calls.notifications[0].appointment).toBe(true);
+    expect(api.calls.notifications[0].timeoutMs).toBe(0);
     expect(appointment.buttons.map((button) => button.id)).toEqual(["accept", "see"]);
     expect(jest.getTimerCount()).toBe(timersBefore + 1);
 
@@ -103,6 +104,44 @@ describe("NotificationCenter", () => {
 
     center.close();
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it.each([false, true])("forwards zero to native delivery and keeps local records alive (buttons: %s)", (buttons) => {
+    jest.useFakeTimers();
+    const api = createFakeNative();
+    const center = new NotificationCenter({ api });
+    try {
+      const notification = center.notify({
+        title: "Persistent",
+        body: "No requested expiry.",
+        timeoutMs: 0,
+        buttons: buttons ? [{ id: "open", label: "Open" }] : undefined,
+      });
+      expect(api.calls.notifications[0].timeoutMs).toBe(0);
+      jest.advanceTimersByTime(DEFAULT_NOTIFICATION_TIMEOUT_MS * 2);
+      expect(notification.dismissed).toBe(false);
+    } finally {
+      center.close();
+    }
+  });
+
+  it("uses the default timeout for both native delivery and local dismissal", () => {
+    jest.useFakeTimers();
+    const api = createFakeNative();
+    const center = new NotificationCenter({ api });
+    const reasons: string[] = [];
+    try {
+      const record = center.notify({ title: "Default", body: "Timed", onDismiss: reason => reasons.push(reason) });
+      expect(api.calls.notifications[0].timeoutMs).toBe(DEFAULT_NOTIFICATION_TIMEOUT_MS);
+      jest.advanceTimersByTime(DEFAULT_NOTIFICATION_TIMEOUT_MS - 1);
+      expect(record.dismissed).toBe(false);
+      jest.advanceTimersByTime(1);
+      expect(record.dismissed).toBe(true);
+      record.dismiss();
+      expect(reasons).toEqual(["timer"]);
+    } finally {
+      center.close();
+    }
   });
 
   it("rejects invalid notification options", () => {
@@ -163,7 +202,7 @@ describe("NotificationCenter", () => {
       });
       expect(notification.delivered).toBe(true);
       expect(api.calls.notifications[0].actions).toBeUndefined();
-      expect(api.calls.notifications[0].timeoutMs).toBeUndefined();
+      expect(api.calls.notifications[0].timeoutMs).toBe(0);
     } finally {
       center.close();
     }

@@ -71,9 +71,9 @@ export type NotifyOptions = {
   /**
    * Auto-dismiss delay in milliseconds. Defaults to
    * {@link DEFAULT_NOTIFICATION_TIMEOUT_MS}; `0` disables the timer. The native
-   * host honours the delay where its notification service supports expiry
-   * (Linux, Windows); macOS applies the system dismissal policy while the
-   * bridge still tracks the timer locally.
+   * host requests the delay where its notification service supports expiry
+   * (Linux, Windows); the OS may override it. macOS uses its system policy.
+   * Zero is forwarded to native code and disables the local timer.
    */
   timeoutMs?: number;
   /** Action buttons; native delivery is Linux-only. */
@@ -232,13 +232,13 @@ export class NotificationCenter {
           options.title,
           options.body,
           actions,
-          timeoutMs > 0 ? timeoutMs : undefined
+          timeoutMs
         );
       } else {
         api.showNotification(
           options.title,
           options.body,
-          timeoutMs > 0 ? timeoutMs : undefined
+          timeoutMs
         );
       }
     } catch (error) {
@@ -276,7 +276,7 @@ export class NotificationCenter {
       api.showAppointmentNotification(
         options.title,
         options.body,
-        timeoutMs > 0 ? timeoutMs : undefined
+        timeoutMs
       );
     } catch (error) {
       this.removeRecord(record);

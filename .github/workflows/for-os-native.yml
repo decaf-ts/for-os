@@ -88,6 +88,9 @@ jobs:
       - name: Verify native source integrity
         run: npm run for-os:integrity:check
 
+      - name: Test native notification and tray contracts
+        run: npm run for-os:test:rust
+
       - name: Build native addon
         run: npm run for-os:build
 

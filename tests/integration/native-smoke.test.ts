@@ -16,7 +16,7 @@ describe("native addon integration", () => {
     }
   });
 
-  smoke("creates a tray, switches icons at runtime, sends a timed notification, and closes", () => {
+  smoke("creates a tray, switches icons at runtime, sends a timed notification, and closes", async () => {
     const tray = TrayIcon.create({
       icon: { base64: TRAY_ICON_BASE64.idle },
       tooltip: "for-os native smoke test",
@@ -29,12 +29,18 @@ describe("native addon integration", () => {
       tray.setTooltip("for-os native smoke test: active");
       tray.setIcon({ base64: TRAY_ICON_BASE64.idle });
 
+      const dismissals: string[] = [];
       const notification = center.notify({
         title: "for-os smoke test",
         body: "Native notification with a 2 second timer.",
         timeoutMs: 2_000,
+        onDismiss: reason => dismissals.push(reason),
       });
       expect(notification.delivered).toBe(true);
+      expect(notification.dismissed).toBe(false);
+      await new Promise(resolve => setTimeout(resolve, 2_100));
+      expect(notification.dismissed).toBe(true);
+      expect(dismissals).toEqual(["timer"]);
     } finally {
       center.close();
       tray.close();

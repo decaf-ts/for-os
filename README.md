@@ -191,10 +191,14 @@ const notification = center.notify({
 notification.onAction((id) => console.log("callback handled", id));
 ```
 
-- `timeoutMs` is passed to the native notification service. Linux
-  (`notify-send --expire-time`) and Windows (balloon-tip timeout) honour it;
-  macOS applies its system dismissal policy. The bridge also tracks the timer
-  locally so `onDismiss("timer")` always fires at the configured time.
+- `timeoutMs` is passed to the native notification service. Linux requests
+  `notify-send --expire-time`; Windows keeps its notification host alive until
+  the requested deadline or a close/click event. The OS may override popup
+  lifetime; macOS always uses its system dismissal policy. The bridge also
+  tracks positive timeouts locally and reports `onDismiss("timer")` on expiry.
+- `timeoutMs: 0` disables local expiry and is forwarded unchanged. Linux requests
+  `--expire-time=0` (never expire); Windows waits for a native close/click event
+  without a bridge deadline. The operating system still controls visibility.
 - `dismiss()` marks the notification dismissed and reports `"manual"`. There is
   no portable API to close an already-visible OS notification, so this is
   bookkeeping, not a remote control.

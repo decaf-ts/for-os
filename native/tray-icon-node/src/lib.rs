@@ -154,6 +154,7 @@ fn notification_command_args(
 ///
 /// `default` is the reserved id the service reports when the notification
 /// body itself (rather than a named button) is activated.
+#[cfg(target_os = "linux")]
 fn push_notification_action(raw_action: &str, default_alias: Option<&str>) {
     let trimmed = raw_action.trim();
     if trimmed.is_empty() {
@@ -282,19 +283,15 @@ fn send_notification_with_alias(
     request: NotificationRequest,
     _default_alias: Option<String>,
 ) -> Result<()> {
-    let NotificationRequest {
-        title,
-        body,
-        expire_ms,
-        ..
-    } = request;
+    #[cfg(target_os = "macos")]
+    let NotificationRequest { title, body, .. } = &request;
 
     #[cfg(target_os = "macos")]
     let mut command = {
         let script = format!(
             "display notification \"{}\" with title \"{}\"",
-            escape_applescript(&body),
-            escape_applescript(&title)
+            escape_applescript(body),
+            escape_applescript(title)
         );
         let mut command = Command::new("osascript");
         command.args(["-e", &script]);
@@ -305,12 +302,7 @@ fn send_notification_with_alias(
     let mut command = {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        let timeout = expire_ms.unwrap_or(10_000);
-        let script = format!(
-            "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.BalloonTipTitle = '{}'; $n.BalloonTipText = '{}'; $n.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info; $n.ShowBalloonTip({timeout}); Start-Sleep -Seconds 2; $n.Dispose()",
-            escape_powershell_single_quote(&title),
-            escape_powershell_single_quote(&body)
-        );
+        let script = windows_notification_script(&request);
         let mut command = Command::new("powershell.exe");
         command
             .args(["-NoProfile", "-NonInteractive", "-Command", &script])
@@ -338,7 +330,37 @@ fn escape_applescript(value: &str) -> String {
         .replace('\n', " ")
 }
 
-#[cfg(target_os = "windows")]
+/// Keeps the Windows notification host alive until the requested deadline or a
+/// native close/click event. A zero timeout leaves dismissal to the OS/user.
+/// Pure so Linux CI also covers the Windows lifecycle command.
+#[cfg(any(target_os = "windows", test))]
+fn windows_notification_script(request: &NotificationRequest) -> String {
+    let timeout = request.expire_ms.unwrap_or(10_000);
+    let deadline = if timeout == 0 {
+        String::new()
+    } else {
+        format!(" -and $timer.ElapsedMilliseconds -lt {timeout}")
+    };
+    format!(
+        "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; \
+         $n = New-Object System.Windows.Forms.NotifyIcon; \
+         $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; \
+         $n.BalloonTipTitle = '{}'; $n.BalloonTipText = '{}'; \
+         $n.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info; \
+         $script:notificationClosed = $false; \
+         $n.add_BalloonTipClosed({{ $script:notificationClosed = $true }}); \
+         $n.add_BalloonTipClicked({{ $script:notificationClosed = $true }}); \
+         $timer = [System.Diagnostics.Stopwatch]::StartNew(); \
+         try {{ $n.ShowBalloonTip({timeout}); \
+         while (-not $script:notificationClosed{deadline}) {{ \
+         [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 50 \
+         }} }} finally {{ $n.Dispose() }}",
+        escape_powershell_single_quote(&request.title),
+        escape_powershell_single_quote(&request.body),
+    )
+}
+
+#[cfg(any(target_os = "windows", test))]
 fn escape_powershell_single_quote(value: &str) -> String {
     value
         .replace('\'', "''")
@@ -395,6 +417,42 @@ mod notification_tests {
     }
 
     #[test]
+    fn preserves_zero_as_linux_never_expire_request() {
+        let request = request(Vec::new()).with_timeout(Some(0));
+        let args = notification_command_args(&request, false);
+        assert!(args.contains(&"--expire-time=0".to_owned()));
+    }
+
+    #[test]
+    fn windows_host_lifetime_matches_requested_timeout() {
+        let script = super::windows_notification_script(&request(Vec::new()));
+        assert!(script.contains("ShowBalloonTip(4000)"));
+        assert!(script.contains("$timer.ElapsedMilliseconds -lt 4000"));
+        assert!(!script.contains("Start-Sleep -Seconds 2"));
+        assert!(script.contains("finally { $n.Dispose() }"));
+        assert!(script.contains("add_BalloonTipClosed"));
+        assert!(script.contains("add_BalloonTipClicked"));
+    }
+
+    #[test]
+    fn windows_zero_waits_for_native_dismissal_without_deadline() {
+        let script = super::windows_notification_script(&request(Vec::new()).with_timeout(Some(0)));
+        assert!(script.contains("ShowBalloonTip(0)"));
+        assert!(!script.contains("ElapsedMilliseconds -lt"));
+        assert!(script.contains("while (-not $script:notificationClosed)"));
+    }
+
+    #[test]
+    fn windows_default_timeout_and_text_escaping() {
+        let request = NotificationRequest::new("a'b".to_owned(), "line\nbreak".to_owned(), Vec::new());
+        let script = super::windows_notification_script(&request);
+        assert!(script.contains("ShowBalloonTip(10000)"));
+        assert!(script.contains("$timer.ElapsedMilliseconds -lt 10000"));
+        assert!(script.contains("$n.BalloonTipTitle = 'a''b'"));
+        assert!(script.contains("$n.BalloonTipText = 'line break'"));
+    }
+
+    #[test]
     fn omits_timer_when_not_configured() {
         let args = notification_command_args(
             &NotificationRequest::new("t".to_owned(), "b".to_owned(), Vec::new()),
@@ -441,7 +499,6 @@ mod notification_tests {
         assert_eq!(super::escape_applescript("a\\b\"c\nd"), "a\\\\b\\\"c d");
     }
 
-    #[cfg(target_os = "windows")]
     #[test]
     fn escapes_powershell_notification_text() {
         assert_eq!(super::escape_powershell_single_quote("a'b\nc"), "a''b c");

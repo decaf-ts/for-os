@@ -87,13 +87,19 @@ async function main() {
   console.log("PASS: checkable menu item toggled false -> true -> false.");
 
   if (smokeOnly) {
+    const dismissals = [];
     const notification = center.notify({
       title: "for-os tray test",
       body: "Rust delivered this timed notification through the operating system.",
       timeoutMs: 3_000,
+      onDismiss: (reason) => dismissals.push(reason),
     });
     console.log(`PASS: timed notification dispatched (${notification.id}).`);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 3_100));
+    if (!notification.dismissed || dismissals.length !== 1 || dismissals[0] !== "timer") {
+      throw new Error("Timed notification did not report local expiry exactly once.");
+    }
+    console.log("PASS: notification expiry callback observed.");
     console.log("PASS: native tray smoke check complete.");
     return;
   }
